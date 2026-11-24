@@ -15,8 +15,8 @@
 	define("V1_SLD_PATH", "//v1.4/sld");
 	define("EXC_001", "Error 01: some geographical point data are not numeric (image and/or map cannot be generated for the complete subset)");
 	
-	define("V1_SLD_URL_REDIS", "https://edit.africamuseum.be/edit_wp5/v1.4_dev_cache/back_sld");
-	define("LEGEND_URL_REDIS", "https://edit.africamuseum.be/edit_wp5/v1.4_dev_cache/back_sld");
-	define("V1_IMG_REDIS","https://edit.africamuseum.be/edit_wp5/v1.4_dev_cache/back_img");
+	define("V1_SLD_URL_REDIS", "https://edit.africamuseum.be/edit_wp5/v2.1/back_sld");
+	define("LEGEND_URL_REDIS", "https://edit.africamuseum.be/edit_wp5/v2.1/back_sld");
+	define("V1_IMG_REDIS","https://edit.africamuseum.be/edit_wp5/v2.1/back_img");
 
 ?>
