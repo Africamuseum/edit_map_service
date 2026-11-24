@@ -1,6 +1,40 @@
 <?php
 	require_once(dirname(__FILE__)."/"."./function_rest_gen.php");
 	
+	function clean_bbox($p_bbox_str)
+	{
+		
+		$parsed=explode(",", $p_bbox_str);
+		$parsed=array_map(fn($x):float=>(float)$x,$parsed);
+		
+		if(count($parsed)!=4)
+		{
+			print("ERROR : malformed bbox");
+			exit();
+		}
+		if($parsed[0]>$parsed[2])
+		{
+			$tmp=$parsed[2];
+			$parsed[2]=$parsed[0];
+			$parsed[0]=$tmp;
+		}
+		if($parsed[1]>$parsed[3])
+		{
+			$tmp=$parsed[3];
+			$parsed[3]=$parsed[1];
+			$parsed[1]=$tmp;
+		}
+		
+		$parsed[0]=max(-180,$parsed[0]);
+		$parsed[1]=max(-90,$parsed[1]);
+		$parsed[2]=min(180,$parsed[2]);
+		$parsed[3]=min(90,$parsed[3]);
+		
+		$parsed=array_map(fn($x):string=>(string)$x,$parsed);
+		return implode(",",$parsed );
+	
+	}
+	
 	function associate_layer_to_style($p_layer_string, $p_delimiter1, $p_delimiter2, $isURL=false)
 	{
 		$returnedArray=Array();
@@ -147,6 +181,29 @@ function xml_to_sld_xslt($p_xml, $displayedLayer, $p_xslt,$path_towrite, $hatchi
 	$fp=fopen("$path_towrite","w");
 	$write=fwrite($fp,$out);
 }
+
+function xml_to_sld_xslt_redis($p_redis, $p_xml, $displayedLayer, $p_xslt, $p_type, $p_random, $hatching="", $field="", $label_field="")
+{	
+	$dom_new = new DOMDocument();
+	$p=simplexml_load_string($p_xml);
+	
+	$hatching=$p->style->hatching;
+	$xsl = new XSLTProcessor;
+	$xsl->setParameter( '', 'symbol', $hatching);
+	$xsl->setParameter( '', 'layer', $displayedLayer);
+	$xsl->setParameter( '', 'field', $field);
+	$xsl->setParameter( '', 'label_field', $label_field);
+	$style = realpath($p_xslt);
+	
+	$dom_new->load($style);
+	$xsl->importStyleSheet($dom_new);
+	$dom_new->loadXML($p_xml);
+	$out = $xsl->transformToXML($dom_new);
+	$redis_key= "xslt|".$p_type."|".$p_random;
+	$p_redis->set($redis_key, $out);
+	
+}
+
 function f_autoFillWMSURL($p_externalWMS, $p_externalWMSVersion, $p_externalWMSLayers, $p_externalWMSStyles, $p_bbox, $p_width, $p_height,  $p_externalWMSFilter )
 {
 	//print("functionCalled");
@@ -298,7 +355,7 @@ function handle_exception_rest($p_arrayExceptions)
 			print($msg);
 			print("\n");
 }
-//ftheeten 05/11/2013
+
 function find_authority_name_for_projection($p_postgisConn, $p_dest_projection )
 {
 	$returned=NULL;
@@ -306,15 +363,14 @@ function find_authority_name_for_projection($p_postgisConn, $p_dest_projection )
 	$stmt=$p_postgisConn->prepare($query);
 	$stmt->execute(array($p_dest_projection));
 	$row = $stmt->fetch(PDO::FETCH_ASSOC);
-	/*$postgis_result=pg_prepare($p_postgisConn, "stmt1" , $query);
-	$postgis_result=pg_execute($p_postgisConn, "stmt1" , array($p_dest_projection));
-	$row=pg_fetch_array($postgis_result, NULL, PGSQL_ASSOC);*/
+	
 	if(isset($row))
 	{
 		$returned=$row["auth_name"].":".$row["auth_srid"];
 	}
 	return $returned;
 }
+
 function convertPointProjection($p_postgisConn, $p_latitude, $p_longitude, $p_src_projection, $p_dest_projection)
 {
 	$returned=NULL;
@@ -322,9 +378,7 @@ function convertPointProjection($p_postgisConn, $p_latitude, $p_longitude, $p_sr
 	
 		if(is_numeric($p_latitude)&&is_numeric($p_longitude))
 		{
-			//vulnérabilité statement non preparé!!!
-			/*$query="SELECT ST_XMAX(ST_TRANSFORM(ST_GEOMFROMTEXT('POINT(".$p_longitude." ".$p_latitude.")',".$p_src_projection."),".$p_dest_projection.")) AS longitude, ST_YMAX(ST_TRANSFORM(ST_GEOMFROMTEXT('POINT(".$p_longitude." ".$p_latitude.")',".$p_src_projection."),".$p_dest_projection.")) AS latitude;";
-			*/
+			
 			$query="SELECT ST_XMAX(ST_TRANSFORM(ST_GEOMFROMTEXT('POINT(? ?)',?),?)) AS longitude, ST_YMAX(ST_TRANSFORM(ST_GEOMFROMTEXT('POINT(? ?)',?),?)) AS latitude;";
 			$stmt=$p_postgisConn->prepare($query);
 			$stmt->execute([$p_longitude, $p_latitude,  $p_src_projection, $p_dest_projection, $p_longitude, $p_latitude,  $p_src_projection, $p_dest_projection]);
@@ -444,7 +498,7 @@ function rewrite_styles_aliases($p_styles, $p_infolayers)
 	function writeSLDForLegend_areas($p_sldSource, $p_title, &$p_alreadyProcessed)
 	{
 	
-		//print_r($p_sldSource);
+		
 		$xml =  new SimpleXMLElement($p_sldSource);
 		$xml->registerXPathNamespace('xmlns', 'http://www.opengis.net/sld');
 		$xml->registerXPathNamespace('xmlns:ogc', 'http://www.opengis.net/ogc');
@@ -612,27 +666,7 @@ function rewrite_styles_aliases($p_styles, $p_infolayers)
 			}
 		}
 		
-		//$xmlEnd="</FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>";
-		
-		/*$path_to_write=$filePath."/".$fileName;
-		$fp=fopen($path_to_write,"w+");
-		if($fp===FALSE)
-		{
-			 print("cannot create file $path_to_write");
-		}
-		else
-		{
-			//print("can create file");
-		}
-		$out=$xmlBegin.$xmlBody.$xmlEnd;
-		
-		$write=fwrite($fp,$out);
-		fclose($fp);
-		//print("__EXIT__");*/
-		
-	//print("--------------");
-	//print($xmlBody);
-	//print("--------------");
+	
 		return $xmlBody;
 	}
 	
@@ -749,3 +783,143 @@ function calculate_bbox_for_distrib($p_distribData)
 		}
 		return $returned;
 	}
+	
+	function download_page($path)
+	{
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_URL,$path);
+		curl_setopt($ch, CURLOPT_FAILONERROR,1);
+		curl_setopt($ch, CURLOPT_FOLLOWLOCATION,1);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+		$retValue = curl_exec($ch);          
+		curl_close($ch);
+		return $retValue;
+	}
+	
+	function imagick_composite_url($p_canvas, $p_url)
+	{
+		$image = new Imagick();
+
+		$image->readImage( $p_url);
+		$p_canvas->compositeImage(
+			$image,
+			Imagick::COMPOSITE_OVER,
+			0,
+			0
+		);
+		return $p_canvas;
+	}
+	
+	function image_magick_to_redis($p_server, $p_key, $p_img)
+	{
+		$p_img->setImageFormat('png');
+
+		$binary = $p_img->getImageBlob();
+
+		$p_server->set($p_key, $binary);
+		$p_img->clear();
+	}
+	
+	function redis_to_imagemagick($p_server, $p_key)
+	{
+		$returned=null;
+		$img_bin = $p_server->get($p_key);
+		if($img_bin !==false)
+		{
+			$image = new Imagick();
+			$image->readImageBlob($img_bin);
+			$image->setImageFormat('png');
+			
+			$returned=$image;
+		}
+		return $returned;
+	}
+	
+	function image_magick_to_redis_composite($p_server, $p_result_key, $p_img1, $p_img2, $p_offset_x=0, $p_offset_y=0 )
+	{
+		$p_img1->compositeImage(
+			$p_img2,
+			Imagick::COMPOSITE_OVER,
+			$p_offset_x,
+			$p_offset_y
+		);
+		$p_img1->setImageFormat('png');
+		$result = $p_img1->getImageBlob();
+		$p_server->set($p_result_key, $result);
+		$p_img1->clear();
+		$p_img2->clear();
+	}
+	
+	function image_magick_to_redis_composite_wrapper($p_server, $p_key1, $p_key2, $p_result_key)
+	{
+		$tmp_img1=redis_to_imagemagick($p_server, $p_key1);
+		$tmp_img2=redis_to_imagemagick($p_server, $p_key2);
+		if($tmp_img1!==null && $tmp_img2!==null)
+		{
+			$tmp_img1->setImageFormat('png');
+			$tmp_img2->setImageFormat('png');
+			$tmp_img1->compositeImage(
+				$tmp_img2,
+				Imagick::COMPOSITE_OVER,
+				0,
+				0
+			);
+			$tmp_img1->setImageFormat('png');
+			$result = $tmp_img1->getImageBlob();
+			$p_server->set($p_result_key, $result);
+			if($p_img1!==null)
+			{
+				$p_img1->clear();
+			}
+			if($p_img2!==null)
+			{
+				$p_img2->clear();
+			}
+		}
+	}
+	
+	function imagick_append_vertically($p_redis, $p_result_key, $p_top, $p_bottom)
+	{
+		
+
+		imagick_append_logic($p_redis, $p_result_key, $p_top, $p_bottom,  true);
+	}
+	
+	function imagick_append_horizontally($p_redis, $p_result_key, $p_left, $p_right)
+	{
+		
+
+		imagick_append_logic($p_redis, $p_result_key, $p_top, $p_bottom,  false);
+	}
+	
+	function imagick_append_logic($p_redis, $p_result_key, $p_top, $p_bottom, $p_direction)
+	{
+		if( $p_top!==null&&$p_bottom!==null)
+		{
+
+			// Fond blanc pour les zones transparentes
+			$p_top->setImageBackgroundColor('white');
+			$p_bottom->setImageBackgroundColor('white');
+
+			$p_top->setImageAlphaChannel(Imagick::ALPHACHANNEL_REMOVE);
+			$p_bottom->setImageAlphaChannel(Imagick::ALPHACHANNEL_REMOVE);
+
+			// Assemblage vertical
+			$p_top->addImage($p_bottom);
+			$p_top->resetIterator();
+
+			$result = $p_top->appendImages($p_direction); // true = vertical
+
+			//$result->writeImage($random2_legend);
+			$result->setImageFormat('png');
+			$result_bin = $result->getImageBlob();
+			$p_server->set($p_result_key, $result_bin);
+			
+			$p_top->clear();
+			$p_bottom->clear();
+			$result->clear();
+		}
+	}
+		
+	

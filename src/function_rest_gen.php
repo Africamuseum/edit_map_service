@@ -69,6 +69,9 @@ $p_no_header_for_tests=FALSE
 				//error_reporting(0);
 
 				//ob_start();
+				
+				$redis = new Redis();
+				$redis->connect('127.0.0.1', 6379);
 				$flagGoodHeaders=TRUE;
 				try
 				{
@@ -137,6 +140,10 @@ $p_no_header_for_tests=FALSE
 				
 				$random2_www=V1_URL."/".$image_file;
 				$random2_legend=V1_IMG.$image_radical."_legend.png";
+				
+				//$random2_www_key="layers_www|".image_radical;
+				$random2_legend_key="layers_legend|".$image_radical;
+				
 				//ftheeten 22/02/2011 (sometimes bug if image previously exists)
 					if(file_exists($random2))
 					{
@@ -425,9 +432,7 @@ $p_no_header_for_tests=FALSE
 					$sqls=array();
 					$random=md5($p_uri );
 					$sql_where_params=Array();
-					$i_sql=0;
-					foreach ($geodata as $key=>$val)
-				
+					foreach ($geodata as $key=>$val)				
 					{	
 
 						//ftheeten march 2013
@@ -490,12 +495,8 @@ $p_no_header_for_tests=FALSE
 				
 				
 				
-					//$sql_total="";
 				
-				
-				
-					foreach ($sqls as $k=>$v)
-				
+					foreach ($sqls as $k=>$v)				
 					{
 						$stmt=$conn->prepare($sql);
 						$conn->execute($sql_where_params[$k]);
@@ -505,21 +506,6 @@ $p_no_header_for_tests=FALSE
 						//$sql_total.=$v;
 				
 					}
-				
-				
-					//print($sql_total);
-					
-				
-					
-				
-					//else
-				
-					/*{
-				
-						// echo $sql_total;
-				
-						pg_exec($sql_total);	
-					}*/
 					$xml="<gml>";
 				
 						$xml.="<feature>Species definition</feature>";
@@ -600,15 +586,18 @@ $p_no_header_for_tests=FALSE
 				
 					$out = $xsl->transformToXML($dom_new);
 				
+					
 				
-				
-					$path_towrite="/var/www/synthesys/www/v1.4/sld/point_".$random.".sld";
+					//$path_towrite="/var/www/synthesys/www/v1.4/sld/point_".$random.".sld";
 				
 					//print($path_towrite);
 				
-					$fp=fopen("$path_towrite","w+");
+					//$fp=fopen("$path_towrite","w+");
 				
-					$write=fwrite($fp,$out);
+					//$write=fwrite($fp,$out);
+					$redis_key= "sld|point|".$random;
+					$redis->set($redis_key, $out);
+					
 				
 				}
 				
@@ -936,7 +925,8 @@ $p_no_header_for_tests=FALSE
 				
 							default:
 				
-								$ls_string=$layers;
+								//$ls_string=$layers;
+								$ls_string="";
 								//ftheeten 13/04/2011	
 								$styles_string="";
 								if($arrayTableStyles[$layers[0]]['value']!==null)
@@ -969,6 +959,7 @@ $p_no_header_for_tests=FALSE
 							//comment out ftheeten 13/04/2011
 				
 							//$styles_string="line";
+							
 							$arrayBackgroundStyle[0]['name']=$ls_string;
 							$arrayBackgroundStyle[0]['style']=$styles_string;
 							$arrayBackgroundStyle[0]['type']=$type_string;
@@ -1764,19 +1755,19 @@ $p_no_header_for_tests=FALSE
 				
 				
 				
-				//$random = (rand()%300).".sld";
+								
+				//$leg_path_towrite="/var/www/synthesys/www/v1.4/sld/$random";
 				
-				//$leg_path_towrite=DIR_PLATFORM."/edit_wp5/fitxers/sld/$random";
+				//$fp=fopen("$leg_path_towrite","w+");
 				
-				$leg_path_towrite="/var/www/synthesys/www/v1.4/sld/$random";
-				
-				$fp=fopen("$leg_path_towrite","w+");
-				
-				$write=fwrite($fp,$out);
+				//$write=fwrite($fp,$out);
 				
 				//$leg_url="/var/www/synthesys/www/v1.4/sld/$random";
 				
-				$leg_url=LEGEND_URL."/".$random;
+				$redis_key= "sld|main|".$random;
+				$redis->set($redis_key, $out);
+				$leg_url=LEGEND_URL_REDIS."/".$redis_key;
+				//$leg_url=LEGEND_URL."/".$random;
 				
 				
 				
@@ -1999,20 +1990,26 @@ $p_no_header_for_tests=FALSE
 				
 				
 				
-					if ($p_bbox)				
-					{				
-						$bbox=$p_bbox;				
+					if ($p_bbox)
+				
+					{
+				
+						$bbox=$p_bbox;
+						$bbox=clean_bbox($bbox);
 						
-					}				
-					else				
+					}
+				
+					else
+				
 					{
 
 						//ftheeten 24/01/2013
 						
 							//$conn = pg_pconnect(POSTGIS_CS);
-								$where_params=Array();
-								//BBOX SQL
-
+			
+								
+								//else BBOX SQL
+									$where_params=Array();
 									$BBOX_sql="SELECT st_extent(g) FROM(select st_extent(the_geom) as g from tdwgs where ";				
 									$c=0;
 								//print("before switch");
@@ -2021,15 +2018,12 @@ $p_no_header_for_tests=FALSE
 									foreach ($tdwg as $k=>$v)
 									{//BEGIN FOR GENERATE SQL BBOX
 										//if added ftheeten 25/01/2013
-									
 										if(array_key_exists($k,$arrayWMSIdxURLs)===FALSE)
 										{
-											
 												$c=0;
 									
 													switch ($k)
-													{
-											
+													{											
 													//ftheeten 21/02/2011: $db_layers and $layer_sh seem unused
 													//see also line 830
 													case ('tdwg1'): $layer='topp:tdwg_level_1';$db_layer='tdwg_level_1';
@@ -2122,7 +2116,9 @@ $p_no_header_for_tests=FALSE
 														$layer=$k;
 														$field=$wms_field_array[$k];
 														$label_field=$wms_field_array[$k];//'?';
-														
+														//print("________________________layer=".$layer);
+														//print("________________________field=".$field);
+										//ftheeten auto boox 24/08/2011
 														if($ibbox==0)
 														{
 															$BBOX_sql="SELECT st_extent(g) FROM(select st_extent(the_geom) as g from ".$layer." where ";
@@ -2142,9 +2138,7 @@ $p_no_header_for_tests=FALSE
 									
 													foreach($v as $key=>$val)
 													{// for $v as $key=>$val)
-														//	var_dump($val);
-														
-										    			if ($c>0)
+														if ($c>0)
 										    			{
 										     				$BBOX_sql.=" OR ";
 										   				 }
@@ -2181,7 +2175,11 @@ $p_no_header_for_tests=FALSE
 										}//end test if(array_key_exists($v,$arrayWMSIdxURLs)===FALSE)
 									}//end FOR bbox
 									//ftheeten 24/08/2011
+									
+									
+	
 									$BBOX_sql.=") AS foo;";
+									
 									$stmt=$conn->prepare($BBOX_sql);
 									$stmt->execute($where_params);
 									$cursor = $stmt->fetchAll();
@@ -2190,7 +2188,9 @@ $p_no_header_for_tests=FALSE
 										$b=substr($row['st_extent'],4);
 										$cadena=substr($b,0,-1); 
 										$bbox=str_replace(' ',',',$cadena);
-									}									
+										
+									}		
+									
 			
 								
 						
@@ -2668,7 +2668,7 @@ $p_no_header_for_tests=FALSE
 					srand(time());
 					
 					
-				
+					/*
 					$path_towrite="/var/www/synthesys/www/v1.4/sld/".$feature."_".$random;
 					//print($path_towrite);
 					//print($out);
@@ -2686,7 +2686,14 @@ $p_no_header_for_tests=FALSE
 				
 					$write=fwrite($fp,$out);
 					
+					
 					array_push($files_list,$path_towrite);
+					*/
+					$redis_key= "sld|".$feature."|".$random;
+					$redis->set($redis_key, $out);
+					
+					//useless
+					array_push($files_list,$redis_key);
 					
 					//echo $out;
 			
@@ -2698,9 +2705,13 @@ $p_no_header_for_tests=FALSE
 					
 					//correction ftheeten 09/04/2010
 					
-					$nameSLDFile=$feature."_".$random;
+					//$nameSLDFile=$feature."_".$random;
 					
-					$json.='"sld": "' . V1_SLD_URL."/".$nameSLDFile.'"';
+					//$json.='"sld": "' . V1_SLD_URL."/".$nameSLDFile.'"';
+					
+					//$nameSLDFile=$redis_key;
+					
+					$json.='"sld": "' . V1_SLD_URL_REDIS."/".$redis_key.'"';
 					
 					
 					$json.='}';
@@ -2723,29 +2734,38 @@ $p_no_header_for_tests=FALSE
 						$bboxReprojection=$point1_conv.",".$point2_conv;
 
 					}
-
+					$copy_url=false;
 					if(strlen($layer)>0||((strlen($urlExternalWMS)>0)&&$flagExternalWMS===TRUE))
 					{
 						//print("BBOX=".$bbox);
 						//print("ADDED");
 						$url="";
 						//test added ftheeten 2013/01/25
+						
 						if($flagExternalWMS===TRUE&&strlen($urlExternalWMS)>0)
 						{
 							$url=$urlExternalWMS;
+							$copy_url=true;
 						}
 						else
 						{						
-							$url=URL_GEOSERVER."?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&TRANSPARENT=TRUE&SERVICE=WMS&EPSG=4326&layers=";
+							if(strlen($bbox)>0)
+							{
+								$url=URL_GEOSERVER."?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&TRANSPARENT=TRUE&SERVICE=WMS&EPSG=4326&layers=";
 				
-							$url.=$layer."&format=image/png&bbox=".$bbox."&WIDTH=".$width."&HEIGHT=".$height."&SLD=".V1_SLD_URL."/".$nameSLDFile;
+								$url.=$layer."&format=image/png&bbox=".$bbox."&WIDTH=".$width."&HEIGHT=".$height."&SLD=".V1_SLD_URL_REDIS."/".$redis_key;
+								$copy_url=true;
+							}
 						}
 						//ftheeten 2014/06/25
-						$sldBeforeLegendRewriting=file_get_contents(V1_SLD_URL."/".$nameSLDFile);
+						//$sldBeforeLegendRewriting=file_get_contents(V1_SLD_URL."/".$nameSLDFile);
+						$sldBeforeLegendRewriting=download_page(V1_SLD_URL_REDIS."/".$redis_key);
+						if($copy_url)
+						{			
+							//print($url);		
+							$url_list[]=$url;				
+						}
 						$xmlBodySLDLegend.=writeSLDForLegend_areas($sldBeforeLegendRewriting, $p_title,$alreadyProcessedLegends);
-						//print($url);		
-						$url_list[]=$url;
-				
 						$legend_list[]=$legend_url;
 					}
 				
@@ -2754,7 +2774,7 @@ $p_no_header_for_tests=FALSE
 				//ftheeten 2014/06/25 (specific SLD for legend)
 				$xmlSLDBegin="<StyledLayerDescriptor xmlns=\"http://www.opengis.net/sld\" xmlns:ogc=\"http://www.opengis.net/ogc\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:wfs=\"http://www.opengis.net/wfs\" version=\"1.0.0\" xsi:schemaLocation=\"http://www.opengis.net/sld StyledLayerDescriptor.xsd3\"><NamedLayer><Name>topp:cyprusdivs</Name><UserStyle><FeatureTypeStyle>";
 				$xmlSLDEnd="</FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>";
-				$sldFileNameAfterLegendRewriting="sld_displayed_legend_".$nameSLDFile;
+				/*$sldFileNameAfterLegendRewriting="sld_displayed_legend_".$nameSLDFile;
 				$path_sldFileNameAfterLegendRewriting=V1_SLD_PATH."/".$sldFileNameAfterLegendRewriting;
 				$fp=fopen($path_sldFileNameAfterLegendRewriting,"w+");
 				if($fp===FALSE)
@@ -2769,8 +2789,14 @@ $p_no_header_for_tests=FALSE
 				
 				$write=fwrite($fp,$out);
 				fclose($fp);
+				*/
 				
-				$sld_url_displayed_legend=V1_SLD_URL."/".$sldFileNameAfterLegendRewriting;
+					
+					$redis_key_leg_rewrite= "sld_leg_rewrite|".$feature."|".$random;
+					$out=$xmlSLDBegin.$xmlBodySLDLegend.$xmlSLDEnd;
+					$redis->set($redis_key_leg_rewrite, $out);
+				
+				$sld_url_displayed_legend=V1_SLD_URL_REDIS."/".$redis_key_leg_rewrite;
 				
 				//correction ftheeten 09/04/2010
 				
@@ -2783,7 +2809,9 @@ $p_no_header_for_tests=FALSE
 				$json.=",\"geoserver\": \"".URL_GEOSERVER."\"";
 				//if($p_occ_data)
 				//{				
-					$json.=",\"points_sld\": \"".URL_SITE."/synthesys/www/v1.4/sld/point_".$random.".sld\"";
+					//$json.=",\"points_sld\": \"".URL_SITE."/synthesys/www/v1.4/sld/point_".$random.".sld\"";
+					$redis_key= "sld|point|".$random;
+					$json.=",\"points_sld\": \"".V1_SLD_URL_REDIS."/".$redis_key."\"";
 					if($flagReprojection===TRUE&&strtolower($p_img)=='false'&&strlen($bboxReprojection)>0)
 					{
 						if(strlen($p_dest_epsg_projection)>0)
@@ -2832,6 +2860,8 @@ $p_no_header_for_tests=FALSE
 				
 					$random3="/var/www/synthesys/www/v1.4/img/".md5($p_uri )."bckgrd_layers.png";
 					$random4="/var/www/synthesys/www/v1.4/img/".md5($p_uri )."wms_layers.png";
+					$random3_key="bckgrd_layers|".md5($p_uri );
+					$random4_key="wms_layers|".md5($p_uri );
 				
 				//ftheeten 22/02/2011 (sometimes bug if image previously exists)
 					if(file_exists($random3))
@@ -2848,12 +2878,13 @@ $p_no_header_for_tests=FALSE
 					$url2_array=array();
 					$url2="";
 					//print("before convert");
-					$c=" convert -size '".$width."x".$height."' xc:transparent $random3";
+					//$c=" convert -size '".$width."x".$height."' xc:transparent $random3";
+					$go_transparent=true;
 					if(isset($arrayBackgroundStyle)===true)
 					{
 						if(count($arrayBackgroundStyle)>0)
 						{
-							$c='';
+							$go_transparent=false;
 							for ($i=0;$i<count($arrayBackgroundStyle);$i++)
 							{
 								if($arrayBackgroundStyle[$i]['external_wms']=="yes")
@@ -2864,6 +2895,7 @@ $p_no_header_for_tests=FALSE
 								}
 								else
 								{
+									//print_r($arrayBackgroundStyle[$i]);
 									$url2=URL_GEOSERVER."?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&TRANSPARENT=TRUE&SERVICE=WMS&EPSG=4326&layers=".$arrayBackgroundStyle[$i]['name'];
 				
 									$url2.="&format=image/png&bbox=".$bbox."&WIDTH=".$width."&HEIGHT=".$height;
@@ -2886,28 +2918,24 @@ $p_no_header_for_tests=FALSE
 								  			//print("prefix");
 											$displayedLayer_sld=$prefix_wms.$arrayBackgroundStyle[$i]['name'];
 										}
-										/*print("1=");
-										print($displayedLayer_sld);
-										print("2=");
-										print($arrayBackgroundStyle[$i]['style']);
-										print("3=");
-										print("4=");
-										print_r($total_symbols);
-										print("5=");
-										print_r($symbols_url);
-										print("::");*/
+										
 										$returnedXML=generate_xml_simple_style_no_zone($displayedLayer_sld, $arrayBackgroundStyle[$i]['style'], $arrayBackgroundStyle[$i]['style'], $total_symbols, $symbols_url);
 										//print($returnedXML);
 										$path_towrite="/var/www/synthesys/www/v1.4/sld/"."_backsld_".$displayedLayer_sld.$random;
 										/*print("returnedXML=");
 										print($returnedXML);
 										print("=");*/
-										xml_to_sld_xslt($returnedXML, $displayedLayer_sld,dirname(__FILE__)."/".'areas_pattern.xsl', $path_towrite );
-										$url_back_sld=V1_SLD_URL."/_backsld_".$displayedLayer_sld.$random;
+										//xml_to_sld_xslt($returnedXML, $displayedLayer_sld,dirname(__FILE__)."/".'areas_pattern.xsl', $path_towrite );
+										xml_to_sld_xslt_redis($redis,$returnedXML, $displayedLayer_sld,dirname(__FILE__)."/".'areas_pattern.xsl', "background", $random );
+										//$url_back_sld=V1_SLD_URL."/_backsld_".$displayedLayer_sld.$random;
+										//$url2.="&SLD=".$url_back_sld;
+										$sld_callback_key= "xslt|background|".$random;
+										$url_back_sld=V1_SLD_URL_REDIS."/".$sld_callback_key;
 										$url2.="&SLD=".$url_back_sld;
 									}
 									if(strpos($url2,"&layers=&")===FALSE)
 									{
+										
 										$url2_array[]=$url2;
 									}
 									//$url2_array[]=$url2;
@@ -2918,17 +2946,37 @@ $p_no_header_for_tests=FALSE
 						}
 					}
 					//print_r($url2_array);
-					if(strlen($c)>0)
+					//if(strlen($c)>0)
+					//{
+					//	shell_exec($c);
+					//}
+					$imagick_transparent = new Imagick();
+
+					/*if($go_transparent)
 					{
-						shell_exec($c);
+						$imagick->newImage(
+							500,
+							300,
+							new ImagickPixel('transparent')
+						);
+
+						$image->setImageFormat('png');
 					}
 				
 				
 				
-				
+				        $c=" convert -size '".$width."x".$height."' xc:transparent $random3";
 						$c=" convert -size '".$width."x".$height."' xc:transparent $random3";
 				
 						shell_exec($c);
+					*/
+					$imagick_transparent->newImage(
+						$width,
+						$height,
+						new ImagickPixel('transparent')
+					);
+					image_magick_to_redis($redis, $random3_key, $imagick_transparent);
+					//$image->setImageFormat('png');
 				
 				if(count($url_list)>1)
 				
@@ -2945,54 +2993,70 @@ $p_no_header_for_tests=FALSE
 						
 						if($i==0)
 						{
-							$c="composite '".$url_list[$i]."' '".$url_list[$i]."' '".$random4."'";
-							shell_exec($c);
+							//$c="composite '".$url_list[$i]."' '".$url_list[$i]."' '".$random4."'";
+							//shell_exec($c);
+							// Deuxième image
+							//$img2 = new Imagick();
+							//$img2->readImageBlob($redis->get('image:2'));
+							$image = new Imagick();
+							//print($url_list[$i]);
+							//exit();
+							$image->readImage( $url_list[$i]);
+							image_magick_to_redis($redis, $random4_key, $image);
+
 					
 						}
 						else
 						{
-							$c="composite '".$url_list[$i]."' '".$random4."' '".$random4."'";
-							shell_exec($c);	
-							//print($c);	
+							
+							//$c="composite '".$url_list[$i]."' '".$random4."' '".$random4."'";
+							//shell_exec($c);	
+							//print($c);
+							$tmp_img1=redis_to_imagemagick($redis, $random4_key);
+							$tmp_img2 = new Imagick();
+							$tmp_img2->readImage( $url_list[$i]);
+							image_magick_to_redis_composite($redis, $random4_key, $tmp_img1, $tmp_img2);
 						}
 				
 				}
-				$c="composite  '$random4' '$random3' '$random2'";
-				
-				//print($c);
-				//readfile($random2);
-				
-				shell_exec($c);
-				
+				//$c="composite  '$random4' '$random3' '$random2'";		
+				//shell_exec($c);
+				//$tmp_img1=redis_to_imagemagick($redis, $random3_key);
+				//$tmp_img2=redis_to_imagemagick($redis, $random4_key);
+				//image_magick_to_redis_composite($redis, $random2_key, $tmp_img1, $tmp_img2);
+				image_magick_to_redis_composite_wrapper($redis, $random3_key, $random4_key, $random2_key);
 				//print($url2);
 				
-				}
-				
-				elseif(count($url_list)==1)
-				
+				}				
+				elseif(count($url_list)==1)				
 				{
 				
 				//SLDs over normal layers
 				
-					$c="composite  '$url_list[0]' '$url_list[0]' '$random4'";
+					//$c="composite  '$url_list[0]' '$url_list[0]' '$random4'";
 				
 					//print($c);
 				
-					shell_exec($c);
-					$c="composite  '$random4' '$random3' '$random2'";
+					//shell_exec($c);
+					$image = new Imagick();
+					$image->readImage( $url_list[0]);
+					image_magick_to_redis($redis, $random4_key, $image);
+					image_magick_to_redis_composite_wrapper($redis, $random3_key, $random4_key, $random2_key);
 				
 				
-					//print($c);
-					shell_exec($c);
-
-
-
 				}
 				elseif(count($url_list)==0)
 				{
-						$c="convert  -size '".$width."x".$height."' xc:transparent $random2";
+						//$c="convert  -size '".$width."x".$height."' xc:transparent $random2";
 				
-						shell_exec($c);
+						//shell_exec($c);
+						$imagick_transparent = new Imagick();
+						$imagick_transparent->newImage(
+							$width,
+							$height,
+							new ImagickPixel('transparent')
+						);
+						image_magick_to_redis($redis, $random2_key, $imagick_transparent);
 				}
 	
 	
@@ -3004,149 +3068,7 @@ $p_no_header_for_tests=FALSE
 	
 	//part ftheeten 12/08/2010 external WMS
 	
-			/*
-			$flagExternalWMS=false;
-			$flagExternalWMSForeground=FALSE;
-			$extWFURLArray=array();
-	
-			$extWFSURL="";
-
-	
-			if(isset($p_externalwms)===true&&isset($p_externalwms_layer)===true)	
-			{
-	
-				$flagExternalWMS=true;
-	
-				$versionWFS=NULL;
-
-				if(isset($p_wms_foreground)===true)
-				{
-					if(strtolower($p_wms_foreground)==="true")
-					{
-						$flagExternalWMSForeground=TRUE;
-					}	
-				}
-	
-	
-				if(isset($p_externalwms_versions)===true)
-	
-				{
-	
-					$versionWFS=$p_externalwms_versions;
-	
-				}
-	
-				$externalWMSStyle="";
-	
-				if(isset($p_externalwms_style)===true)
-	
-				{
-	
-					$externalWMSStyle=$p_externalwms_style;
-	
-				}
-	
-				if(strlen($p_externalwms)>0&&strlen($p_externalwms_layer)>0)
-	
-				{
-	
-									$versionWFS=NULL;
-	
-							if(isset($p_externalwms_versions)===true)
-	
-							{
-	
-								$versionWFS=$p_externalwms_versions;
-	
-							}
-	
-							$externalWMSStyle=NULL;
-	
-							if(isset($p_externalwms_style)===true)
-	
-							{
-	
-								$externalWMSStyle=$p_externalwms_style;
-	
-							}
-	
-					if(strpos($p_externalwms,"|")>0)
-	
-					{
-	
-							$arrayWFS=array();
-	
 			
-	
-							$arrayWFS=f_checkWMSParams($arrayWFS,$p_externalwms,"URL","[\|]","[:]");
-	
-							$arrayWFS=f_checkWMSParams($arrayWFS,$versionWFS,"VERSION","[\|]","[:]");
-	
-							$arrayWFS=f_checkWMSParams($arrayWFS,$p_externalwms_layer,"LAYERS","[\|]","[:]");
-	
-							$arrayWFS=f_checkWMSParams($arrayWFS,$externalWMSStyle,"STYLES","[\|]","[:]");
-	
-							//print("!!!arrayWFS=>");
-	
-							//print_r($arrayWFS);
-	
-							foreach($arrayWFS as $key=>$arrayWFSitem)
-	
-							{
-	
-								$extWFSURLArray[]=f_writeKeyWFSURL($arrayWFS,$key,$bbox,$width,$height);
-	
-							}
-	
-							
-	
-					}
-	
-					else
-	
-					{
-	
-						$externalWMS=$p_externalwms;
-	
-						$externalWMSLayer=$p_externalwms_layer;
-	
-						
-	
-	
-	
-						$extWFSURL=f_autoFillWMSURL($externalWMS,$externalWMSVersion,$externalWMSLayer,$externalWMSStyle,$bbox,$width,$height, $p_externalwms_filter);
-	
-						$extWFSURLArray[]=$extWFSURL;
-	
-					}
-	
-				}
-	
-	
-	
-			}
-			
-			//27/09/2012 mmodif franck foreground
-			if($flagExternalWMS===true&&$flagExternalWMSForeground==FALSE)
-	
-			{
-	
-				$cptLayers=count($extWFSURLArray);
-	
-				for($i=$cptLayers-1;$i>=0;$i--)
-	
-				{
-	
-					$c="composite '$random2' '$extWFSURLArray[$i]' '$random2'";
-	
-					shell_exec($c);
-	
-				}		
-	
-				
-	
-			}
-*/
 			if(isset($url2_array)===true)
 			{
 				if(count($url2_array)>0)
@@ -3159,11 +3081,19 @@ $p_no_header_for_tests=FALSE
 	
 					{
 	
-						$c="composite '$random2' '$url2_array[$i]' '$random2'";
+						//$c="composite '$random2' '$url2_array[$i]' '$random2'";
 						//print($url2_array[$i]);
 
 	
-						shell_exec($c);
+						//shell_exec($c);
+						$image1 = new Imagick();
+						//print_r($url2_array[$i]);
+						//exit();
+						$image1->readImage( $url2_array[$i]);
+						$image2=redis_to_imagemagick($redis, $random2_key);
+						image_magick_to_redis_composite($redis, $random2_key, $image1, $image2);
+						//image_magick_to_redis($redis, $random2_key, $image);
+						//image_magick_to_redis_composite_wrapper($redis, $random3_key, $random4_key, $random2_key);
 	
 					}		
 	
@@ -3172,15 +3102,7 @@ $p_no_header_for_tests=FALSE
 				}	
 			}
 			
-	/*
-			if(strlen($url2)>0)
-			{
-				$c=" composite '$random2' '$url2' '$random2' ";
-				shell_exec($c);
-			}
-	
-	*/
-	
+
 	
 	//---display points
 	if($flagDisplayPoints===true)
@@ -3199,60 +3121,52 @@ $p_no_header_for_tests=FALSE
 				$raster='atbi_gemer.png';
 				//$raster='gemer2.jpg';
 			}
-			$c="composite '$random2' '$raster' '$random2'";
-			shell_exec($c);
-	
+			//$c="composite '$random2' '$raster' '$random2'";
+			//shell_exec($c);
+			$handle = fopen($raster, 'rb');
+			$image1 = new Imagick();
+			$image1->readImageFile($handle);
+			$image1->setImageFormat('png');
+			$image2=redis_to_imagemagick($redis, $random2_key);
+			image_magick_to_redis_composite($redis, $random2_key, $image1, $image2);
+				
 		}
 	
+		$redis_key= "sld|point|".$random;
+
+		$wms_url.=URL_GEOSERVER."?SERVICE=WMS&VERSION=1.1.1&TRANSPARENT=true&STYLES=&REQUEST=GetMap&SERVICE=WMS&EPSG=4326&layers=rest_points&EPSG=4326&format=image/png&bbox=".$bbox."&WIDTH=".$width."&HEIGHT=".$height."&SLD=".V1_SLD_URL_REDIS."/".$redis_key;
 	
-		$sld_url.=URL_GEOSERVER."?SERVICE=WMS&VERSION=1.1.1&TRANSPARENT=true&STYLES=&REQUEST=GetMap&SERVICE=WMS&EPSG=4326&layers=rest_points&EPSG=4326&format=image/png&bbox=".$bbox."&WIDTH=".$width."&HEIGHT=".$height."&SLD=".URL_SITE."/synthesys/www/v1.4/sld/point_".$random.".sld";
-	
-		//print($sld_url);
+		//print($wms_url);
 	
 		//$image=imagecreatefrompng($edit_url);
 	
 		$points= (rand()%300)."_p.png";
+		$points_key="points_p|".  (rand()%300);
 	//ftheeten 22/02/2011 (sometimes bug if image previously exists)
 		if(file_exists(V1_IMG.'/'.$points))
 		{
 			unlink(V1_IMG.'/'.$points);
 		}
-		//print($sld_url);
-		$c="convert '$sld_url' '".V1_IMG."/$points'";
-		shell_exec($c) ;
+		//print($wms_url);
+		//$c="convert '$wms_url' '".V1_IMG."/$points'";
+		//shell_exec($c) ;
+		$image = new Imagick();
+		$image->readImage( $wms_url);
+		image_magick_to_redis($redis, $points_key, $image);
 
 //print("----");
 //print($c);
 //print("----");
-		$c="composite '".V1_IMG."/$points' '$random2' '$random2'";
-		shell_exec($c);	
-
+		//$c="composite '".V1_IMG."/$points' '$random2' '$random2'";
+		//shell_exec($c);	
+		image_magick_to_redis_composite_wrapper($redis, $random2_key, $random2_key, $points_key);
 //print($c);	
 //print("----");
 	}
 	//end display points
 	
 	//27/09/2012 mmodif franck foreground
-			/*if($flagExternalWMS===true&&$flagExternalWMSForeground==TRUE)
-	
-		{
-					
-				$cptLayers=count($extWFSURLArray);
-	
-				for($i=$cptLayers-1;$i>=0;$i--)
-	
-				{
-				
-					$c="composite  '".$extWFSURLArray[$i]."' '$random2' '$random2'";
-	
-					shell_exec($c);
-	
-				}		
-	
-				
-	
-			}*/
-	
+
 	if ($leg=='1')
 	
 	{
@@ -3261,14 +3175,23 @@ $p_no_header_for_tests=FALSE
 		$legend_url=URL_GEOSERVER."/wms?REQUEST=GetLegendGraphic&VERSION=1.1.1&format=image/png&WIDTH=64&HEIGHT=36&";
 	
 
-					$legend_url.="layer=topp:tdwg_level_3&LEGEND_OPTIONS=forceLabels:on;fontStyle:italic;fontSize:12&SLD=".$sld_url_displayed_legend;
-	$com="convert  '$legend_url' '$random2_legend'";
-	shell_exec($com);
+	$legend_url.="layer=topp:tdwg_level_3&LEGEND_OPTIONS=forceLabels:on;fontStyle:italic;fontSize:12&SLD=".$sld_url_displayed_legend;
+	//$com="convert  '$legend_url' '$random2_legend'";
+	//shell_exec($com);
+		$image = new Imagick();
+		$image->readImage( $legend_url);
+		image_magick_to_redis($redis, $random2_legend_key, $image);
 		if($flagDisplayPoints===true)
 		{
-			$legend_url_point.=URL_GEOSERVER."/wms?REQUEST=GetLegendGraphic&LEGEND_OPTIONS=forceLabels:on;fontStyle:italic;fontSize:12&VERSION=1.1.1&format=image/png&WIDTH=20&HEIGHT=30&layer=rest_points&SLD=".URL_SITE."/synthesys/www/v1.4/sld/point_".$random.".sld";
-			$com="convert -background white -append '$legend_url_point' '$random2_legend'  '$random2_legend' ";
-			shell_exec($com);
+			$redis_key= "sld|point|".$p_random;
+			$legend_url_point.=URL_GEOSERVER."/wms?REQUEST=GetLegendGraphic&LEGEND_OPTIONS=forceLabels:on;fontStyle:italic;fontSize:12&VERSION=1.1.1&format=image/png&WIDTH=20&HEIGHT=30&layer=rest_points&SLD=".V1_SLD_URL_REDIS."/".$random;
+			//$com="convert -background white -append '$legend_url_point' '$random2_legend'  '$random2_legend' ";
+			//shell_exec($com);
+			
+			$image1 = new Imagick();
+			$image1->readImage( $legend_url_point);
+			$image2=redis_to_imagemagick($redis, $random2_legend_key );			
+			 imagick_append_vertically($redis, $random2_legend_key, $image1, $image2);
 		}
 	
 	//print(">>>");	
@@ -3292,9 +3215,11 @@ $p_no_header_for_tests=FALSE
 	
 	 	{
 	
+			$image1=redis_to_imagemagick($redis, $random2_legend_key );		
+			$image2=redis_to_imagemagick($redis, $random2_key );						
+			imagick_append_horizontally($redis, $random2_key, $image1, $image2);
 	
-	
-	$com="convert -background white +append '$random2_legend' '$random2'  '$random2'"; //-->exterior ul  
+			//$com="convert -background white +append '$random2_legend' '$random2'  '$random2'"; //-->exterior ul  
 	
 	break;
 	
@@ -3303,8 +3228,8 @@ $p_no_header_for_tests=FALSE
 	case ('2'):
 	
 	 	{
-	
-	$com="convert -background white -append '$random2_legend' '$random2'  '$random2' "; 	//2
+			imagick_append_vertically($redis, $random2_key, $image1, $image2);
+			//$com="convert -background white -append '$random2_legend' '$random2'  '$random2' "; 	//2
 	
 	 break;
 	
@@ -3314,7 +3239,11 @@ $p_no_header_for_tests=FALSE
 	
 	 	{
 	
-	$com="convert -background white +append  '$random2' '$random2_legend'   '$random2' "; //4
+	//$com="convert -background white +append  '$random2' '$random2_legend'   '$random2' "; //4
+			$image1=redis_to_imagemagick($redis, $random2_key );		
+			$image2=redis_to_imagemagick($redis, $random2_legend_key );						
+			imagick_append_horizontally($redis, $random2_key, $image1, $image2);
+	
 	
 	break;
 	
@@ -3328,7 +3257,8 @@ $p_no_header_for_tests=FALSE
 	
 	 	
 	
-	$com="convert  -background white -append  '$random2' '$random2_legend'   '$random2'"; //7
+			//$com="convert  -background white -append  '$random2' '$random2_legend'   '$random2'"; //7
+			imagick_append_vertically($redis, $random2_key, $image1, $image2);
 	
 	break;
 	
@@ -3338,7 +3268,13 @@ $p_no_header_for_tests=FALSE
 	
 	 	{ 	
 	
-	 $com="composite -gravity  SouthEast '$random2_legend'  '$random2'   '$random2'";//9
+			//$com="composite -gravity  SouthEast '$random2_legend'  '$random2'   '$random2'";//9
+			$image1=redis_to_imagemagick($redis, $random2_key );		
+			$image2=redis_to_imagemagick($redis, $random2_legend_key );	
+			$x = $image1->getImageWidth() - $overlay->getImageWidth();
+			$y = $image2->getImageHeight() - $overlay->getImageHeight();
+			image_magick_to_redis_composite($redis, $random2_key, $image1, $image2, $x, $y);
+
 	
 	break;
 	
@@ -3348,7 +3284,13 @@ $p_no_header_for_tests=FALSE
 	
 	 	{ 	
 	
-	 $com="composite  -gravity  SouthWest '$random2_legend'  '$random2'   '$random2'";//10
+			//$com="composite  -gravity  SouthWest '$random2_legend'  '$random2'   '$random2'";//10
+			$image1=redis_to_imagemagick($redis, $random2_key );		
+			$image2=redis_to_imagemagick($redis, $random2_legend_key );	
+			$x = 0;
+			$y = $image2->getImageHeight() - $overlay->getImageHeight();
+			image_magick_to_redis_composite($redis, $random2_key, $image1, $image2, $x, $y);
+			
 	
 	break;
 	
@@ -3358,7 +3300,12 @@ $p_no_header_for_tests=FALSE
 	
 	 	{ 	
 	
-	 $com="composite -gravity  NorthEast '$random2_legend'  '$random2'   '$random2'";//11
+				//$com="composite -gravity  NorthEast '$random2_legend'  '$random2'   '$random2'";//11
+				$image1=redis_to_imagemagick($redis, $random2_key );		
+				$image2=redis_to_imagemagick($redis, $random2_legend_key );	
+				$x =  $image1->getImageWidth() - $overlay->getImageWidth();
+				$y = 0;
+				image_magick_to_redis_composite($redis, $random2_key, $image1, $image2, $x, $y);
 	
 	break;
 	
@@ -3368,24 +3315,31 @@ $p_no_header_for_tests=FALSE
 	
 	 	{ 	
 	
-	 $com="composite -gravity  NorthWest '$random2_legend'  '$random2'   '$random2'";//12
+			//$com="composite -gravity  NorthWest '$random2_legend'  '$random2'   '$random2'";//12
+			$image1=redis_to_imagemagick($redis, $random2_key );		
+			$image2=redis_to_imagemagick($redis, $random2_legend_key );	
+			image_magick_to_redis_composite($redis, $random2_key, $image1, $image2);
 	
-	break;//$c.="'".$url_list[$i]."' ";?
+		break;//$c.="'".$url_list[$i]."' ";?
 	
-	}	
+		}	
 	
 	}
 	
-	shell_exec($com);
+	//shell_exec($com);
 	//print($com);
 	
 	//B&W mode ftheeten 2011/07/05
 	
-	if (strtolower($p_grayscale)==='true')
-	{
-		$com_monochrome="convert -type Grayscale '$random2' '$random2'";
-		shell_exec($com_monochrome);
-	}
+		if (strtolower($p_grayscale)==='true')
+		{
+			//$com_monochrome="convert -type Grayscale '$random2' '$random2'";
+			//shell_exec($com_monochrome);
+			$image1=redis_to_imagemagick($redis, $random2_key );
+			$image1->setImageType(Imagick::IMGTYPE_GRAYSCALEMATTE);
+			image_magick_to_redis($redis, $random2_key, $image1);
+			
+		}
 	
 	}
 	
@@ -3420,7 +3374,22 @@ $p_no_header_for_tests=FALSE
 				header("Expires: Sat, 26 Jul 1997 05:00:00 GMT"); // Date dans le pass?
 			}
 			//print_r($random2);
-			readfile($random2);
+			//readfile($random2);
+			$test= $redis->exists($random2_key );
+			if($test>0)
+			{
+				$img = $redis->get($random2_key );
+
+				
+				header('Content-Length: ' . strlen($img));
+				print($img);
+				exit;
+			}
+			else
+			{
+				print("Image not found");
+			}
+						
 
 		}
 	}

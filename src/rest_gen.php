@@ -3,6 +3,7 @@ ini_set('log_errors','On');
 ini_set('display_errors','Off');
 ini_set('error_reporting', E_ALL );
 
+
 require_once(dirname(__FILE__)."/"."./path_index.php");
 //print(dirname(__FILE__)."/"."./path_index.php");
 require_once(dirname(__FILE__)."/"."./function_lib_rest_dev_full.php");
