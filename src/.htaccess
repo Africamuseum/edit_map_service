@@ -1,0 +1,9 @@
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteEngine on 
+RewriteCond %{REQUEST_FILENAME} !-d
+
+RewriteRule ^back_sld/(.*)$ ./backsld_callback.php?sld_key=$1 [L,QSA]
+RewriteRule ^back_sld/(.*)\.sld$ ./backsld_callback.php?sld_key=$1 [L,QSA]
+
+RewriteRule ^back_img/(.*)$ ./backimg_callback.php?img_key=$1 [L,QSA]
+RewriteRule ^back_img/(.*)\.png$ ./backimg_callback.php?img_key=$1 [L,QSA]
